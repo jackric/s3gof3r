@@ -1,7 +1,9 @@
 package s3gof3r
 
 import (
+	"bytes"
 	"crypto/md5"
+	"encoding/xml"
 	"fmt"
 	"hash"
 	"io"
@@ -9,6 +11,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -50,6 +53,52 @@ type chunk struct {
 	start  int64
 	size   int64
 	b      []byte
+}
+
+type KeyContent struct {
+	Key          string
+	LastModified string
+	Size         string
+	StorageClass string
+}
+
+type ListBucketResult struct {
+	XMLName  xml.Name `xml:"ListBucketResult"`
+	Name     string
+	Prefix   string
+	Contents []KeyContent
+}
+
+func (r *ListBucketResult) ListKeys() (keys []string) {
+	for i := range r.Contents {
+		keys = append(keys, r.Contents[i].Key)
+	}
+	return
+}
+
+func ListObjects(prefix string, b *Bucket) (*ListBucketResult, error) {
+	// TODO: handle responses with > 1000 keys, probably by returning a
+	// buffered channel and looping over requests
+	var emptyBody = strings.NewReader("")
+	var url = "http://" + b.Name + ".s3.amazonaws.com/?list-type=2&prefix=" + prefix
+	req, err := http.NewRequest("GET", url, emptyBody)
+
+	b.Sign(req)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+
+	if err != nil {
+		return nil, err
+	}
+	bodyBuf := new(bytes.Buffer)
+	bodyBuf.ReadFrom(resp.Body)
+
+	myResult := ListBucketResult{}
+	err = xml.Unmarshal(bodyBuf.Bytes(), &myResult)
+	if err != nil {
+		return nil, err
+	}
+	return &myResult, nil
 }
 
 func newGetter(getURL url.URL, c *Config, b *Bucket) (io.ReadCloser, http.Header, error) {
