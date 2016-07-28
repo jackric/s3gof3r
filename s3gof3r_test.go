@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"syscall"
@@ -63,6 +64,9 @@ var getTests = []struct {
 		1 * mb,
 		nil},
 	{"b1", nil, 1, nil},
+	{"testdir/a", nil, 1, nil},
+	{"testdir/b", nil, 1, nil},
+	{"testdir/c", nil, 1, nil},
 	{"0byte", &Config{Scheme: "https", Client: ClientWithTimeout(clientTimeout), Md5Check: false}, 0, nil},
 }
 
@@ -617,5 +621,17 @@ func BenchmarkGet(k *testing.B) {
 		}
 		k.SetBytes(n)
 		r.Close()
+	}
+}
+
+func TestListObjects(t *testing.T) {
+	myResult, err := ListObjects("testdir", b.Bucket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := myResult.ListKeys()
+	expectKeys := []string{"testdir/a", "testdir/b", "testdir/c"}
+	if !reflect.DeepEqual(expectKeys, keys) {
+		t.Fatalf("Expecting keys %v, got %v", expectKeys, keys)
 	}
 }
