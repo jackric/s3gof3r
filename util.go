@@ -86,3 +86,27 @@ func checkClose(c io.Closer, err error) {
 	}
 
 }
+
+// A bytes.Reader that can be focefully stopped
+// Also can report it's progress
+type readerWrapper struct {
+	*bytes.Reader
+	closed bool
+}
+
+func (r *readerWrapper) ForceClose() {
+	r.closed = true
+}
+
+func (r *readerWrapper) BytesDone() int64 {
+	total := r.Reader.Size()
+	todo := r.Reader.Len()
+	return total - int64(todo)
+}
+
+func (r *readerWrapper) Read(p []byte) (n int, err error) {
+	if r.closed {
+		return 0, io.ErrUnexpectedEOF
+	}
+	return r.Reader.Read(p)
+}
