@@ -64,6 +64,9 @@ var getTests = []struct {
 		1 * mb,
 		nil},
 	{"b1", nil, 1, nil},
+	{"testdir/a", nil, 1, nil},
+	{"testdir/b", nil, 1, nil},
+	{"testdir/c", nil, 1, nil},
 	{"0byte", &Config{Scheme: "https", Client: ClientWithTimeout(clientTimeout), Md5Check: false}, 0, nil},
 }
 
@@ -640,4 +643,16 @@ func TestObjectMetaData(t *testing.T) {
 		t.Fatalf("Expected metadata missing from %v", result)
 	}
 	equals(t, fooMetaData[0], "testmeta")
+}
+
+func TestListObjects(t *testing.T) {
+	myResult, err := ListObjects("testdir", b.Bucket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := myResult.ListKeys()
+	expectKeys := []string{"testdir/a", "testdir/b", "testdir/c"}
+	if !reflect.DeepEqual(expectKeys, keys) {
+		t.Fatalf("Expecting keys %v, got %v", expectKeys, keys)
+	}
 }
