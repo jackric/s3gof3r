@@ -2,6 +2,7 @@ package s3gof3r
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 )
@@ -113,5 +114,24 @@ func TestBuildSignature(t *testing.T) {
 	if s.signature != expect {
 		t.Errorf("signature don't match, got '%s', expected '%s'",
 			s.signature, expect)
+	}
+}
+
+var escapeTests = []struct {
+	in  string
+	out string
+}{
+	{"http://foo.com/a/b", "/a/b"},
+	{"http://foo.com/a=123", "/a%3D123"},
+	{"http://foo.com/john@doe.com", "/john%40doe.com"},
+}
+
+func TestAwsEscapedPath(t *testing.T) {
+	for _, tt := range escapeTests {
+		u, _ := url.Parse(tt.in)
+		result := awsEscapedPath(u)
+		if result != tt.out {
+			t.Errorf("Expected %s got %s", tt.out, result)
+		}
 	}
 }

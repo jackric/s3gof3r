@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -113,13 +114,29 @@ func (s *signer) buildCanonicalHeaders() {
 	s.canonicalHeaders = strings.Join(headerValues, "\n")
 }
 
+func awsEscapedPath(url *url.URL) (escaped string) {
+	// AWS doesn't like certain characters left unescaped
+	escaped = url.EscapedPath()
+	replacements := []struct {
+		original string
+		escaped  string
+	}{
+		{"@", "%40"},
+		{"=", "%3D"},
+	}
+	for _, r := range replacements {
+		escaped = strings.Replace(escaped, r.original, r.escaped, -1)
+	}
+	return
+}
+
 func (s *signer) buildCanonicalString() {
 	s.Request.URL.RawQuery = strings.Replace(s.Request.URL.Query().Encode(), "+", "%20", -1)
 	uri := s.Request.URL.Opaque
 	if uri != "" {
 		uri = "/" + strings.Join(strings.Split(uri, "/")[3:], "/")
 	} else {
-		uri = s.Request.URL.EscapedPath()
+		uri = awsEscapedPath(s.Request.URL)
 	}
 	if uri == "" {
 		uri = "/"
