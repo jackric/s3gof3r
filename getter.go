@@ -106,7 +106,7 @@ func ListObjects(prefix string, b *Bucket) (*ListBucketResult, error) {
 	return &myResult, nil
 }
 
-func newGetter(getURL url.URL, c *Config, b *Bucket) (io.ReadCloser, http.Header, error) {
+func newGetter(getURL url.URL, c *Config, b *Bucket) (*getter, http.Header, error) {
 	g := new(getter)
 	g.url = getURL
 	g.c, g.b = new(Config), new(Bucket)
