@@ -656,3 +656,55 @@ func TestListObjects(t *testing.T) {
 		t.Fatalf("Expecting keys %v, got %v", expectKeys, keys)
 	}
 }
+
+func TestPutAsync(t *testing.T) {
+	expectSize := 1 * mb
+	r := &randSrc{Size: int(expectSize)}
+	pc, err := b.PutAsync("foo_file.bin", nil, DefaultConfig, r)
+	if err != nil {
+		t.Fatalf("Failed creating PutAsync: %s", err)
+	}
+loopA:
+	for {
+		select {
+		case <-pc.Done():
+			break loopA
+		case <-time.After(500 * time.Millisecond):
+			t.Logf("Done %d bytes at speed %d\n", pc.BytesDone(), pc.Speed())
+		}
+	}
+	equals(t, pc.BytesDone(), expectSize)
+	equals(t, "Completed", pc.State)
+	equals(t, "", pc.Reason)
+
+}
+
+// Can we efficiently cancel a transfer part way?
+func TestPutAsyncCancel(t *testing.T) {
+	expectSize := 1 * mb
+	cancelBytes := expectSize / 5
+	// Allow up to 10% of bytes to "slip through" during the cancelling operation
+	acceptableSentBytes := int64(float32(cancelBytes) * 1.1)
+	r := &randSrc{Size: int(expectSize)}
+	pc, err := b.PutAsync("foo_file.bin", nil, DefaultConfig, r)
+	if err != nil {
+		t.Fatalf("Failed creating PutAsync: %s", err)
+	}
+loopA:
+	for {
+		select {
+		case <-pc.Done():
+			break loopA
+		case <-time.After(1 * time.Millisecond):
+			if pc.BytesDone() >= cancelBytes {
+				pc.Stop()
+			}
+		}
+	}
+
+	if pc.BytesDone() > acceptableSentBytes {
+		t.Errorf("Transfer didn't efficiently cancel; we sent more than %d bytes", acceptableSentBytes)
+	}
+	equals(t, "Failed", pc.State)
+	equals(t, "Stopped", pc.Reason)
+}
