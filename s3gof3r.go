@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"gopkg.in/tomb.v2"
 )
 
 const versionParam = "versionId"
@@ -137,6 +139,98 @@ func (b *Bucket) PutWriter(path string, h http.Header, c *Config) (w io.WriteClo
 	}
 
 	return newPutter(*u, h, c, b)
+}
+
+func (b *Bucket) PutAsync(path string, h http.Header, c *Config, r io.Reader) (pc *PutController, err error) {
+	// TODO make PutWriter a waiting wrapper about PutAsync
+	if c == nil {
+		c = b.conf()
+	}
+
+	u, err := b.url(path, c)
+	if err != nil {
+		return nil, err
+	}
+
+	putter, err := newPutter(*u, h, c, b)
+	pc = &PutController{putter: putter, st: newSpeedTracker(), t: tomb.Tomb{}, State: "Ready"}
+
+	pc.t.Go(pc.loop)
+
+	go func() {
+
+		_, err = io.Copy(putter, r)
+		if err != nil {
+			fmt.Printf("XKill for %s", err)
+
+			pc.t.Kill(err)
+		}
+		err = putter.Close()
+		if err != nil {
+			fmt.Printf("YKill for %s", err)
+			pc.t.Kill(err)
+		}
+		// Normal termination because copy finished with no errors
+		pc.Complete()
+	}()
+
+	return pc, nil
+}
+
+type PutController struct {
+	t      tomb.Tomb
+	putter *putter
+	st     *speedTracker
+	State  string
+	Reason string
+}
+
+// This is about 24fps; a sensisble rate of change for human consumption
+var loopPeriod = 40 * time.Millisecond
+
+func (p *PutController) Done() <-chan struct{} {
+	return p.t.Dead()
+}
+
+func (p *PutController) loop() error {
+	p.State = "Uploading"
+	for {
+		select {
+		case <-p.t.Dying():
+			// Kill requested
+			p.st = nil
+			for _, part := range p.putter.xml.Part {
+				part.rwrapper.ForceClose()
+			}
+			return nil
+		case <-time.After(loopPeriod):
+			p.st.update(p.BytesDone())
+		}
+
+	}
+}
+
+var ErrStopped = errors.New("Stopped")
+
+func (p *PutController) Speed() int64 {
+	return p.st.Speed
+}
+
+func (p *PutController) BytesDone() int64 {
+	return p.putter.BytesDone()
+}
+
+func (p *PutController) Complete() {
+	p.t.Kill(nil)
+	p.State = "Completed"
+}
+
+func (p *PutController) Stop() (err error) {
+	p.t.Kill(ErrStopped)
+	err = p.t.Wait()
+	p.State = "Failed"
+	p.Reason = err.Error()
+	return
 }
 
 // url returns a parsed url to the given path. c must not be nil
