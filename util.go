@@ -117,3 +117,29 @@ func (r *readerWrapper) Read(p []byte) (n int, err error) {
 	r.bytesdone += int64(n)
 	return
 }
+
+type speedTracker struct {
+	Speed    int64
+	lastTime time.Time
+	lastDone int64
+}
+
+func newSpeedTracker() *speedTracker {
+	return &speedTracker{lastTime: time.Now()}
+}
+
+func (s *speedTracker) update(bytesNow int64) (speed int64) {
+	newBytes := bytesNow - s.lastDone
+	timeNow := time.Now()
+	elapsed := timeNow.Sub(s.lastTime)
+	elapsedSeconds := elapsed.Seconds()
+
+	newSpeed := int64(float64(newBytes) / elapsedSeconds)
+	s.Speed = rollingAvg(s.Speed, newSpeed)
+	return s.Speed
+}
+
+func rollingAvg(existing int64, new int64) int64 {
+	smoothingFactor := 0.05
+	return int64((smoothingFactor * float64(new)) + ((1 - smoothingFactor) * float64(existing)))
+}
