@@ -91,7 +91,8 @@ func checkClose(c io.Closer, err error) {
 // Also can report it's progress
 type readerWrapper struct {
 	*bytes.Reader
-	closed bool
+	closed    bool
+	bytesdone int64
 }
 
 func (r *readerWrapper) ForceClose() {
@@ -99,14 +100,20 @@ func (r *readerWrapper) ForceClose() {
 }
 
 func (r *readerWrapper) BytesDone() int64 {
-	total := r.Reader.Size()
-	todo := r.Reader.Len()
-	return total - int64(todo)
+	return r.bytesdone
+}
+
+func (r *readerWrapper) Seek(offset int64, whence int) (abs int64, err error) {
+	abs, err = r.Seek(offset, whence)
+	r.bytesdone = abs
+	return
 }
 
 func (r *readerWrapper) Read(p []byte) (n int, err error) {
 	if r.closed {
 		return 0, io.ErrUnexpectedEOF
 	}
-	return r.Reader.Read(p)
+	n, err = r.Reader.Read(p)
+	r.bytesdone += int64(n)
+	return
 }
