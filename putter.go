@@ -43,6 +43,8 @@ type part struct {
 	// Checksums
 	md5    string
 	sha256 string
+
+	rwrapper readerWrapper
 }
 
 type putter struct {
@@ -71,6 +73,14 @@ type putter struct {
 		Part    []*part
 	}
 	putsz int64
+}
+
+func (p *putter) BytesDone() (total int64) {
+	for i := range p.xml.Part {
+		iPart := p.xml.Part[i]
+		total += iPart.rwrapper.BytesDone()
+	}
+	return
 }
 
 // Sends an S3 multipart upload initiation request.
@@ -142,8 +152,10 @@ func (p *putter) flush() {
 	p.wg.Add(1)
 	p.part++
 	p.putsz += int64(p.bufbytes)
+	reader := bytes.NewReader(p.buf[:p.bufbytes])
 	part := &part{
-		r:          bytes.NewReader(p.buf[:p.bufbytes]),
+		r:          reader,
+		rwrapper:   readerWrapper{Reader: reader},
 		len:        int64(p.bufbytes),
 		b:          p.buf,
 		PartNumber: p.part,
