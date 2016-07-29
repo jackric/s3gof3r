@@ -155,7 +155,7 @@ func (p *putter) flush() {
 	reader := bytes.NewReader(p.buf[:p.bufbytes])
 	part := &part{
 		r:          reader,
-		rwrapper:   readerWrapper{Reader: reader},
+		rwrapper:   *newReaderWrapper(reader),
 		len:        int64(p.bufbytes),
 		b:          p.buf,
 		PartNumber: p.part,
@@ -210,7 +210,7 @@ func (p *putter) putPart(part *part) error {
 	if _, err := part.r.Seek(0, 0); err != nil { // move back to beginning, if retrying
 		return err
 	}
-	req, err := http.NewRequest("PUT", p.url.String()+"?"+v.Encode(), part.r)
+	req, err := http.NewRequest("PUT", p.url.String()+"?"+v.Encode(), part.rwrapper)
 	if err != nil {
 		return err
 	}
