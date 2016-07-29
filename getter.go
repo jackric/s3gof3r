@@ -39,6 +39,9 @@ type getter struct {
 	qWaitLen uint
 	cond     sync.Cond
 
+	activeChunks     map[int]*chunk
+	activeChunksLock *sync.Mutex
+
 	sp *bp
 
 	closed bool
@@ -49,11 +52,12 @@ type getter struct {
 }
 
 type chunk struct {
-	id     int
-	header http.Header
-	start  int64
-	size   int64
-	b      []byte
+	id       int
+	header   http.Header
+	start    int64
+	size     int64
+	b        []byte
+	rwrapper *readerWrapper
 }
 
 type KeyContent struct {
@@ -118,6 +122,8 @@ func newGetter(getURL url.URL, c *Config, b *Bucket) (io.ReadCloser, http.Header
 	g.b = b
 	g.md5 = md5.New()
 	g.cond = sync.Cond{L: &sync.Mutex{}}
+	g.activeChunksLock = &sync.Mutex{}
+	g.activeChunks = make(map[int]*chunk)
 
 	// use get instead of head for error messaging
 	resp, err := g.retryRequest("GET", g.url.String(), nil)
@@ -198,6 +204,9 @@ func (g *getter) initChunks() {
 
 func (g *getter) worker() {
 	for c := range g.getCh {
+		g.activeChunksLock.Lock()
+		g.activeChunks[c.id] = c
+		g.activeChunksLock.Unlock()
 		g.retryGetChunk(c)
 	}
 }
@@ -233,11 +242,12 @@ func (g *getter) getChunk(c *chunk) error {
 	if err != nil {
 		return err
 	}
+	c.rwrapper = newReaderWrapper(resp.Body)
 	defer checkClose(resp.Body, err)
 	if resp.StatusCode != 206 && resp.StatusCode != 200 {
 		return newRespError(resp)
 	}
-	n, err := io.ReadAtLeast(resp.Body, c.b, int(c.size))
+	n, err := io.ReadAtLeast(c.rwrapper, c.b, int(c.size))
 	if err != nil {
 		return err
 	}
@@ -301,6 +311,9 @@ func (g *getter) Read(p []byte) (int, error) {
 		g.bytesRead += int64(n)
 
 		if g.cIdx >= g.rChunk.size { // chunk complete
+			g.activeChunksLock.Lock()
+			delete(g.activeChunks, g.rChunk.id)
+			g.activeChunksLock.Unlock()
 			g.sp.give <- g.rChunk.b
 			g.chunkID++
 			g.rChunk = nil
