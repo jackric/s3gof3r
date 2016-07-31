@@ -708,3 +708,32 @@ loopA:
 	equals(t, "Failed", pc.State)
 	equals(t, "Stopped", pc.Reason)
 }
+
+func TestGetAsync(t *testing.T) {
+	path := "1_mb_test"
+	w, err := os.Create("/dev/null")
+	if err != nil {
+		t.Fatalf("Failed to open /dev/null")
+	}
+	gc, err := b.GetAsync(path, DefaultConfig, w)
+	fmt.Printf("Created getter\n")
+	//pc, err := b.PutAsync("foo_file.bin", nil, DefaultConfig, r)
+	if err != nil {
+		t.Fatalf("Failed creating GetAsync: %s", err)
+	}
+loopA:
+	for {
+		select {
+		case <-gc.Done():
+			break loopA
+		case <-time.After(500 * time.Millisecond):
+			//fmt.Printf("loop\n")
+			t.Logf("Done %d bytes at speed %d\n", gc.BytesDone(), gc.Speed())
+		}
+	}
+	expectSize := 1 * mb
+	equals(t, gc.BytesDone(), expectSize)
+	equals(t, "Completed", gc.State)
+	equals(t, "", gc.Reason)
+
+}

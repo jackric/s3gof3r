@@ -123,6 +123,72 @@ func (b *Bucket) GetReader(path string, c *Config) (r io.ReadCloser, h http.Head
 	return newGetter(*u, c, b)
 }
 
+type GetterController struct {
+	t      tomb.Tomb
+	st     *speedTracker
+	getter *getter
+	State  string
+	Reason string
+}
+
+func (g *GetterController) Done() <-chan struct{} {
+	return g.t.Dead()
+}
+func (g *GetterController) BytesDone() int64 {
+	return 0
+}
+
+func (g *GetterController) Speed() int64 {
+	return 0
+}
+
+func (g *GetterController) loop() error {
+	g.State = "Uploading"
+	for {
+		select {
+		case <-g.t.Dying():
+			// Kill requested
+			g.st = nil
+			g.getter.activeChunksLock.Lock()
+			for _, chunk := range g.getter.activeChunks {
+				chunk.rwrapper.ForceClose()
+			}
+			g.getter.Close()
+			g.getter.activeChunksLock.Unlock()
+			return nil
+		case <-time.After(loopPeriod):
+			// TODO copy in bytesdone from old repo
+			g.st.update(0)
+		}
+
+	}
+	return nil
+}
+
+func (b *Bucket) GetAsync(path string, c *Config, w io.WriteCloser) (controller *GetterController, err error) {
+	if path == "" {
+		return nil, errors.New("empty path requested")
+	}
+	if c == nil {
+		c = b.conf()
+	}
+	u, err := b.url(path, c)
+	if err != nil {
+		return nil, err
+	}
+	getReader, _, err := newGetter(*u, c, b)
+	if err != nil {
+		return nil, err
+	}
+	controller = &GetterController{getter: getReader, st: newSpeedTracker(), t: tomb.Tomb{}, State: "Ready"}
+	controller.t.Go(controller.loop)
+	go func() {
+		io.Copy(w, getReader)
+	}()
+
+	return
+}
+
 // PutWriter provides a writer to upload data as multipart upload requests.
 //
 // Each header in h is added to the HTTP request header. This is useful for specifying
