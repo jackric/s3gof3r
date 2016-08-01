@@ -160,6 +160,14 @@ func (g *GetterController) Complete() {
 	g.State = "Completed"
 }
 
+func (g *GetterController) Stop() (err error) {
+	g.t.Kill(ErrStopped)
+	err = g.t.Wait()
+	g.State = "Failed"
+	g.Reason = err.Error()
+	return
+}
+
 func (g *GetterController) loop() error {
 	g.State = "Uploading"
 	for {
