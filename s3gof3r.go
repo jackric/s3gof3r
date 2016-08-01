@@ -134,12 +134,30 @@ type GetterController struct {
 func (g *GetterController) Done() <-chan struct{} {
 	return g.t.Dead()
 }
-func (g *GetterController) BytesDone() int64 {
-	return 0
+func (g *GetterController) BytesDone() (total int64) {
+	g.getter.activeChunksLock.Lock()
+	for _, chunk := range g.getter.activeChunks {
+		// Expected that a chunk gets non-nil rwrapper later;
+		// when it has an HTTP response body to read from
+		if chunk.rwrapper != nil {
+			total += chunk.rwrapper.BytesDone()
+		}
+	}
+	g.getter.activeChunksLock.Unlock()
+	// Race exists here - we might report a higher number of bytes read
+	// because of the un-atomic deleting of an active chunk with regards to
+	// bytesRead in getter. Not urgent to fix yet.
+	total += g.getter.bytesRead
+	return
 }
 
 func (g *GetterController) Speed() int64 {
-	return 0
+	return g.st.Speed
+}
+
+func (g *GetterController) Complete() {
+	g.t.Kill(nil)
+	g.State = "Completed"
 }
 
 func (g *GetterController) loop() error {
@@ -158,7 +176,7 @@ func (g *GetterController) loop() error {
 			return nil
 		case <-time.After(loopPeriod):
 			// TODO copy in bytesdone from old repo
-			g.st.update(0)
+			g.st.update(g.BytesDone())
 		}
 
 	}
