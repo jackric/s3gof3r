@@ -201,9 +201,17 @@ func (b *Bucket) GetAsync(path string, c *Config, w io.WriteCloser) (controller 
 	controller = &GetterController{getter: getReader, st: newSpeedTracker(), t: tomb.Tomb{}, State: "Ready"}
 	controller.t.Go(controller.loop)
 	go func() {
-		io.Copy(w, getReader)
+		_, err := io.Copy(w, getReader)
+		if err != nil {
+			controller.t.Kill(err)
+		}
+		err = getReader.Close()
+		if err != nil {
+			controller.t.Kill(err)
+		}
+		// Normal termination because copy finished with no errors
+		controller.Complete()
 	}()
-
 	return
 }
 
