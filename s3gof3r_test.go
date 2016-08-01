@@ -709,15 +709,23 @@ loopA:
 	equals(t, "Stopped", pc.Reason)
 }
 
+var AsyncGetConfig = &Config{
+	Concurrency: 10,
+	PartSize:    1 * mb,
+	NTry:        10,
+	Md5Check:    false,
+	Scheme:      "https",
+	Client:      ClientWithTimeout(clientTimeout),
+}
+
 func TestGetAsync(t *testing.T) {
 	path := "1_mb_test"
+	expectSize := 1 * mb
 	w, err := os.Create("/dev/null")
 	if err != nil {
 		t.Fatalf("Failed to open /dev/null")
 	}
-	gc, err := b.GetAsync(path, DefaultConfig, w)
-	fmt.Printf("Created getter\n")
-	//pc, err := b.PutAsync("foo_file.bin", nil, DefaultConfig, r)
+	gc, err := b.GetAsync(path, AsyncGetConfig, w)
 	if err != nil {
 		t.Fatalf("Failed creating GetAsync: %s", err)
 	}
@@ -727,13 +735,48 @@ loopA:
 		case <-gc.Done():
 			break loopA
 		case <-time.After(500 * time.Millisecond):
-			//fmt.Printf("loop\n")
-			t.Logf("Done %d bytes at speed %d\n", gc.BytesDone(), gc.Speed())
+			// TODO convert all my Speed and Size types to uint64
+			t.Logf(
+				"Done %d at speed %d bytes/s\n",
+				gc.BytesDone(),
+				gc.Speed(),
+			)
 		}
 	}
-	expectSize := 1 * mb
-	equals(t, gc.BytesDone(), expectSize)
+	equals(t, expectSize, gc.BytesDone())
 	equals(t, "Completed", gc.State)
 	equals(t, "", gc.Reason)
+}
 
+func TestGetAsyncCancel(t *testing.T) {
+	path := "1_mb_test"
+	w, err := os.Create("/dev/null")
+	expectSize := 1 * mb
+	cancelBytes := expectSize / 100
+	// Allow up to 20% of bytes to "slip through" during the cancelling operation
+	acceptableSentBytes := int64(float32(cancelBytes) * 1.2)
+	if err != nil {
+		t.Fatalf("Failed to open /dev/null")
+	}
+	gc, err := b.GetAsync(path, AsyncGetConfig, w)
+	if err != nil {
+		t.Fatalf("Failed creating GetAsync: %s", err)
+	}
+loopA:
+	for {
+		select {
+		case <-gc.Done():
+			break loopA
+		case <-time.After(5 * time.Millisecond):
+			if gc.BytesDone() > cancelBytes {
+				gc.Stop()
+			}
+		}
+	}
+
+	if gc.BytesDone() > acceptableSentBytes {
+		t.Errorf("Transfer didn't efficiently cancel; we got more than %d bytes", acceptableSentBytes)
+	}
+	equals(t, "Failed", gc.State)
+	equals(t, "Stopped", gc.Reason)
 }
