@@ -177,10 +177,10 @@ func (g *GetterController) loop() error {
 			// Kill requested
 			g.st = nil
 			g.getter.activeChunksLock.Lock()
+			g.getter.Close()
 			for _, chunk := range g.getter.activeChunks {
 				chunk.rwrapper.ForceClose()
 			}
-			g.getter.Close()
 			g.getter.activeChunksLock.Unlock()
 			return nil
 		case <-time.After(loopPeriod):
