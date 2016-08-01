@@ -161,6 +161,7 @@ func (g *GetterController) Complete() {
 }
 
 func (g *GetterController) Stop() (err error) {
+	g.getter.err = ErrStopped
 	g.t.Kill(ErrStopped)
 	err = g.t.Wait()
 	g.State = "Failed"
