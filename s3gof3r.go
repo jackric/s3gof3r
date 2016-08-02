@@ -316,7 +316,6 @@ func (p *PutController) loop() error {
 		select {
 		case <-p.t.Dying():
 			// Kill requested
-			p.st = nil
 			for _, part := range p.putter.xml.Part {
 				part.rwrapper.ForceClose()
 			}
