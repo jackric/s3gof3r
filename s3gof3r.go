@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -126,6 +127,7 @@ func (b *Bucket) GetReader(path string, c *Config) (r io.ReadCloser, h http.Head
 type GetterController struct {
 	t      tomb.Tomb
 	st     *speedTracker
+	size   int64
 	getter *getter
 	State  string
 	Reason string
@@ -153,6 +155,10 @@ func (g *GetterController) BytesDone() (total int64) {
 
 func (g *GetterController) Speed() int64 {
 	return g.st.Speed
+}
+
+func (g *GetterController) Size() int64 {
+	return g.size
 }
 
 func (g *GetterController) Complete() {
@@ -203,11 +209,22 @@ func (b *Bucket) GetAsync(path string, c *Config, w io.WriteCloser) (controller 
 	if err != nil {
 		return nil, err
 	}
-	getReader, _, err := newGetter(*u, c, b)
+	getReader, headers, err := newGetter(*u, c, b)
 	if err != nil {
 		return nil, err
 	}
-	controller = &GetterController{getter: getReader, st: newSpeedTracker(), t: tomb.Tomb{}, State: "Ready"}
+	sizeStr := headers["Content-Length"][0]
+	size, err := strconv.ParseInt(sizeStr, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	controller = &GetterController{
+		getter: getReader,
+		st:     newSpeedTracker(),
+		t:      tomb.Tomb{},
+		State:  "Ready",
+		size:   int64(size),
+	}
 	controller.t.Go(controller.loop)
 	go func() {
 		_, err := io.Copy(w, getReader)

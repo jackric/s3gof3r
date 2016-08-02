@@ -729,6 +729,8 @@ func TestGetAsync(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed creating GetAsync: %s", err)
 	}
+	size := gc.Size()
+	equals(t, expectSize, size)
 loopA:
 	for {
 		select {
