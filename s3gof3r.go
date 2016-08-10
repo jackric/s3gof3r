@@ -179,7 +179,7 @@ func (g *GetterController) Stop() (err error) {
 }
 
 func (g *GetterController) loop() error {
-	g.State = "Uploading"
+	g.State = "Downloading"
 	for {
 		select {
 		case <-g.t.Dying():
