@@ -320,6 +320,7 @@ func (p *PutController) loop() error {
 		case <-p.t.Dying():
 			// Kill requested
 			for _, part := range p.putter.xml.Part {
+				p.putter.c.NTry = 0
 				part.rwrapper.ForceClose()
 			}
 			return nil
