@@ -320,7 +320,14 @@ func (p *putter) abort() {
 		logger.Printf("Error aborting multipart upload: %v\n", err)
 		return
 	}
+	if resp == nil {
+		// TODO better error handling here, why is resp nil?
+		// XXX I put this in to avoid a panic
+		return
+	}
+
 	defer checkClose(resp.Body, err)
+
 	if resp.StatusCode != 204 {
 		logger.Printf("Error aborting multipart upload: %v", newRespError(resp))
 	}
