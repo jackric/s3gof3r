@@ -154,6 +154,9 @@ func (g *GetterController) BytesDone() (total int64) {
 }
 
 func (g *GetterController) Speed() int64 {
+	if g.st == nil {
+		return 0
+	}
 	return g.st.Speed
 }
 
@@ -330,10 +333,17 @@ func (p *PutController) loop() error {
 var ErrStopped = errors.New("Stopped")
 
 func (p *PutController) Speed() int64 {
-	return p.st.Speed
+	if p != nil {
+		return p.st.Speed
+	}
+	return 0
+
 }
 
 func (p *PutController) BytesDone() int64 {
+	if p == nil {
+		return 0
+	}
 	return p.putter.BytesDone()
 }
 
