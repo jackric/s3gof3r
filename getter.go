@@ -3,8 +3,8 @@ package s3gof3r
 import (
 	"bytes"
 	"crypto/md5"
-	"errors"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -68,10 +68,11 @@ type KeyContent struct {
 }
 
 type ListBucketResult struct {
-	XMLName  xml.Name `xml:"ListBucketResult"`
-	Name     string
-	Prefix   string
-	Contents []KeyContent
+	XMLName        xml.Name `xml:"ListBucketResult"`
+	Name           string
+	Prefix         string
+	Contents       []KeyContent
+	CommonPrefixes []struct{ Prefix string }
 }
 
 func (r *ListBucketResult) ListKeys() (keys []string) {
@@ -81,20 +82,32 @@ func (r *ListBucketResult) ListKeys() (keys []string) {
 	return
 }
 
-func ListObjects(prefix string, b *Bucket) (*ListBucketResult, error) {
+func (r *ListBucketResult) Dirs() (dirs []string) {
+	for _, commonPrefix := range r.CommonPrefixes {
+		dirs = append(dirs, commonPrefix.Prefix)
+	}
+	return
+}
+
+func listObjectsGeneric(prefix string, delimiter string, b *Bucket) (*ListBucketResult, error) {
 	// TODO: handle responses with > 1000 keys, probably by returning a
 	// buffered channel and looping over requests
+
+	url := "http://" + b.Name + ".s3.amazonaws.com/?list-type=2&prefix=" + prefix
+	if delimiter != "" {
+		url = url + "&delimiter=" + delimiter
+	}
 	var emptyBody = strings.NewReader("")
-	var url = "http://" + b.Name + ".s3.amazonaws.com/?list-type=2&prefix=" + prefix
+
 	req, err := http.NewRequest("GET", url, emptyBody)
 
 	b.Sign(req)
 	client := &http.Client{}
 	resp, err := client.Do(req)
-
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	bodyBuf := new(bytes.Buffer)
 	bodyBuf.ReadFrom(resp.Body)
 
@@ -104,6 +117,14 @@ func ListObjects(prefix string, b *Bucket) (*ListBucketResult, error) {
 		return nil, err
 	}
 	return &myResult, nil
+}
+
+func ListObjectsHierarchical(prefix string, b *Bucket) (*ListBucketResult, error) {
+	return listObjectsGeneric(prefix, "/", b)
+}
+
+func ListObjects(prefix string, b *Bucket) (*ListBucketResult, error) {
+	return listObjectsGeneric(prefix, "", b)
 }
 
 func newGetter(getURL url.URL, c *Config, b *Bucket) (*getter, http.Header, error) {

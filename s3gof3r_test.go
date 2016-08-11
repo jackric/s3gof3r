@@ -67,6 +67,7 @@ var getTests = []struct {
 	{"testdir/a", nil, 1, nil},
 	{"testdir/b", nil, 1, nil},
 	{"testdir/c", nil, 1, nil},
+	{"testdir/subdir/x", nil, 1, nil},
 	{"0byte", &Config{Scheme: "https", Client: ClientWithTimeout(clientTimeout), Md5Check: false}, 0, nil},
 }
 
@@ -624,12 +625,6 @@ func BenchmarkGet(k *testing.B) {
 	}
 }
 
-func equals(t *testing.T, expect interface{}, actual interface{}) {
-	if !reflect.DeepEqual(expect, actual) {
-		t.Fatalf("Expected %v got %v", expect, actual)
-	}
-}
-
 func TestObjectMetaData(t *testing.T) {
 	path := "metadatatest"
 	err := b.putReader(path, goodHeader(), &randSrc{Size: 0})
@@ -651,9 +646,47 @@ func TestListObjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	keys := myResult.ListKeys()
-	expectKeys := []string{"testdir/a", "testdir/b", "testdir/c"}
+	expectKeys := []string{"testdir/a", "testdir/b", "testdir/c", "testdir/subdir/x"}
 	if !reflect.DeepEqual(expectKeys, keys) {
 		t.Fatalf("Expecting keys %v, got %v", expectKeys, keys)
+	}
+}
+
+func TestListObjectsHierarchical(t *testing.T) {
+	myResult, err := ListObjectsHierarchical("testdir/", b.Bucket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	equals(t, []string{"testdir/subdir/"}, myResult.Dirs())
+	expectKeys := []string{"testdir/a", "testdir/b", "testdir/c"}
+	equals(t, myResult.ListKeys(), expectKeys)
+
+}
+
+// assert fails the test if the condition is false.
+func assert(tb testing.TB, condition bool, msg string, v ...interface{}) {
+	if !condition {
+		_, file, line, _ := runtime.Caller(1)
+		fmt.Printf("\033[31m%s:%d: "+msg+"\033[39m\n\n", append([]interface{}{filepath.Base(file), line}, v...)...)
+		tb.FailNow()
+	}
+}
+
+// ok fails the test if an err is not nil.
+func ok(tb testing.TB, err error) {
+	if err != nil {
+		_, file, line, _ := runtime.Caller(1)
+		fmt.Printf("\033[31m%s:%d: unexpected error: %s\033[39m\n\n", filepath.Base(file), line, err.Error())
+		tb.FailNow()
+	}
+}
+
+// equals fails the test if exp is not equal to act.
+func equals(tb testing.TB, exp, act interface{}) {
+	if !reflect.DeepEqual(exp, act) {
+		_, file, line, _ := runtime.Caller(1)
+		fmt.Printf("\033[31m%s:%d:\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", filepath.Base(file), line, exp, act)
+		tb.FailNow()
 	}
 }
 
