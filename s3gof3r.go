@@ -164,6 +164,10 @@ func (g *GetterController) Size() int64 {
 	return g.size
 }
 
+func (g *GetterController) Headers() map[string][]string {
+	return g.Headers()
+}
+
 func (g *GetterController) Complete() {
 	g.t.Kill(nil)
 	g.State = "Completed"
