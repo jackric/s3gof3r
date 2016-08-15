@@ -125,12 +125,13 @@ func (b *Bucket) GetReader(path string, c *Config) (r io.ReadCloser, h http.Head
 }
 
 type GetterController struct {
-	t      tomb.Tomb
-	st     *speedTracker
-	size   int64
-	getter *getter
-	State  string
-	Reason string
+	t       tomb.Tomb
+	st      *speedTracker
+	size    int64
+	getter  *getter
+	State   string
+	Reason  string
+	headers map[string][]string
 }
 
 func (g *GetterController) Done() <-chan struct{} {
@@ -165,7 +166,7 @@ func (g *GetterController) Size() int64 {
 }
 
 func (g *GetterController) Headers() map[string][]string {
-	return g.Headers()
+	return g.headers
 }
 
 func (g *GetterController) Complete() {
@@ -226,11 +227,12 @@ func (b *Bucket) GetAsync(path string, c *Config, w io.WriteCloser) (controller 
 		return nil, err
 	}
 	controller = &GetterController{
-		getter: getReader,
-		st:     newSpeedTracker(),
-		t:      tomb.Tomb{},
-		State:  "Ready",
-		size:   int64(size),
+		getter:  getReader,
+		st:      newSpeedTracker(),
+		t:       tomb.Tomb{},
+		State:   "Ready",
+		size:    int64(size),
+		headers: headers,
 	}
 	controller.t.Go(controller.loop)
 	go func() {
