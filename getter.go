@@ -68,62 +68,95 @@ type KeyContent struct {
 }
 
 type ListBucketResult struct {
-	XMLName        xml.Name `xml:"ListBucketResult"`
-	Name           string
-	Prefix         string
-	Contents       []KeyContent
-	CommonPrefixes []struct{ Prefix string }
+	XMLName               xml.Name `xml:"ListBucketResult"`
+	Name                  string
+	Prefix                string
+	Contents              []KeyContent
+	CommonPrefixes        []struct{ Prefix string }
+	IsTruncated           bool
+	ContinuationToken     string
+	NextContinuationToken string
 }
 
-func (r *ListBucketResult) ListKeys() (keys []string) {
-	for i := range r.Contents {
-		keys = append(keys, r.Contents[i].Key)
+// TODO: better name
+type ListBucketContainer struct {
+	results []*ListBucketResult
+}
+
+func (r *ListBucketContainer) ListKeys() (keys []string) {
+	for _, container := range r.results {
+		for _, keycontent := range container.Contents {
+			keys = append(keys, keycontent.Key)
+		}
 	}
 	return
 }
 
-func (r *ListBucketResult) Dirs() (dirs []string) {
-	for _, commonPrefix := range r.CommonPrefixes {
-		dirs = append(dirs, commonPrefix.Prefix)
+func (r *ListBucketContainer) Dirs() (dirs []string) {
+	for _, container := range r.results {
+		for _, commonPrefix := range container.CommonPrefixes {
+			dirs = append(dirs, commonPrefix.Prefix)
+		}
 	}
 	return
 }
 
-func listObjectsGeneric(prefix string, delimiter string, b *Bucket) (*ListBucketResult, error) {
-	// TODO: handle responses with > 1000 keys, probably by returning a
-	// buffered channel and looping over requests
+func listObjectsGeneric(prefix string, delimiter string, b *Bucket) (*ListBucketContainer, error) {
 
-	url := "http://" + b.Name + ".s3.amazonaws.com/?list-type=2&prefix=" + prefix
-	if delimiter != "" {
-		url = url + "&delimiter=" + delimiter
+	var continuationToken string
+	var container = &ListBucketContainer{}
+	maxIters := 100
+	for i := 1; i <= maxIters; i = i + 1 {
+		url := "http://" + b.Name + ".s3.amazonaws.com/?list-type=2"
+
+		var emptyBody = strings.NewReader("")
+
+		req, err := http.NewRequest("GET", url, emptyBody)
+		if err != nil {
+			return nil, err
+		}
+		q := req.URL.Query()
+		q.Add("prefix", prefix)
+		if delimiter != "" {
+			q.Add("delimiter", delimiter)
+		}
+		if continuationToken != "" {
+			q.Add("continuation-token", continuationToken)
+		}
+		req.URL.RawQuery = q.Encode()
+
+		b.Sign(req)
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		bodyBuf := new(bytes.Buffer)
+		bodyBuf.ReadFrom(resp.Body)
+
+		myResult := ListBucketResult{}
+		err = xml.Unmarshal(bodyBuf.Bytes(), &myResult)
+		if err != nil {
+			fmt.Printf("Can't unmarshal:\n%s\n", bodyBuf.Bytes())
+			return nil, err
+		}
+		container.results = append(container.results, &myResult)
+		if myResult.NextContinuationToken != "" {
+			continuationToken = myResult.NextContinuationToken
+		} else {
+			return container, nil
+		}
 	}
-	var emptyBody = strings.NewReader("")
-
-	req, err := http.NewRequest("GET", url, emptyBody)
-
-	b.Sign(req)
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	bodyBuf := new(bytes.Buffer)
-	bodyBuf.ReadFrom(resp.Body)
-
-	myResult := ListBucketResult{}
-	err = xml.Unmarshal(bodyBuf.Bytes(), &myResult)
-	if err != nil {
-		return nil, err
-	}
-	return &myResult, nil
+	// If we got here it's because we hit maxIters without finding the end of the results
+	return nil, fmt.Errorf("List results exceeded maximum number of pages: %d", maxIters)
 }
 
-func ListObjectsHierarchical(prefix string, b *Bucket) (*ListBucketResult, error) {
+func ListObjectsHierarchical(prefix string, b *Bucket) (*ListBucketContainer, error) {
 	return listObjectsGeneric(prefix, "/", b)
 }
 
-func ListObjects(prefix string, b *Bucket) (*ListBucketResult, error) {
+func ListObjects(prefix string, b *Bucket) (*ListBucketContainer, error) {
 	return listObjectsGeneric(prefix, "", b)
 }
 
