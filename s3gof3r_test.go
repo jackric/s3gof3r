@@ -10,7 +10,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -650,6 +653,57 @@ func TestListObjects(t *testing.T) {
 	if !reflect.DeepEqual(expectKeys, keys) {
 		t.Fatalf("Expecting keys %v, got %v", expectKeys, keys)
 	}
+}
+
+func makeHugeFileList(size int) (result []string) {
+	for i := 1; i <= size; i = i + 1 {
+		newFile := fmt.Sprintf("biglist/file%d", i)
+		result = append(result, newFile)
+	}
+	return
+}
+
+func uploadTestFilesLimitedConcurrency(paths []string) {
+	var wg sync.WaitGroup
+	pathchan := make(chan string)
+	for i := 1; i <= 5; i++ {
+		wg.Add(1)
+		go func() {
+			for path := range pathchan {
+
+				err := b.putReader(path, nil, &randSrc{Size: 1})
+				if err != nil {
+					log.Fatalf("Error uploading test file %s: %s", path, err)
+				}
+				fmt.Printf(".")
+			}
+			wg.Done()
+		}()
+	}
+	fmt.Printf("\n")
+	for _, path := range paths {
+		pathchan <- path
+	}
+	close(pathchan)
+	wg.Wait()
+	fmt.Printf("\n")
+}
+
+func TestListHugeList(t *testing.T) {
+	// AWS limit is 1000 per page, let's go slightly over to test paging
+	biglist := makeHugeFileList(1006)
+	uploadTestFilesLimitedConcurrency(biglist)
+	myResult, err := ListObjects("biglist", b.Bucket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := myResult.ListKeys()
+	sort.Strings(keys)
+	sort.Strings(biglist)
+	if !reflect.DeepEqual(biglist, keys) {
+		t.Fatalf("Expecting keys %v, got %v", biglist, keys)
+	}
+
 }
 
 func TestListObjectsHierarchical(t *testing.T) {
