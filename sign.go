@@ -114,18 +114,14 @@ func (s *signer) buildCanonicalHeaders() {
 	s.canonicalHeaders = strings.Join(headerValues, "\n")
 }
 
-func awsEscapedPath(url *url.URL) (escaped string) {
+func awsEscapedPath(urlIn *url.URL) (escaped string) {
 	// AWS doesn't like certain characters left unescaped
-	escaped = url.EscapedPath()
-	replacements := []struct {
-		original string
-		escaped  string
-	}{
-		{"@", "%40"},
-		{"=", "%3D"},
-	}
-	for _, r := range replacements {
-		escaped = strings.Replace(escaped, r.original, r.escaped, -1)
+	// See "Characters That Might Require Special Handling"
+	// http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMetadata.html
+	escaped = urlIn.EscapedPath()
+	specialChars := []string{"&", "$", "@", "=", ";", ":", " ", ",", "?"}
+	for _, s := range specialChars {
+		escaped = strings.Replace(escaped, s, url.QueryEscape(s), -1)
 	}
 	return
 }

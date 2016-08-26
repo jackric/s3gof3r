@@ -122,6 +122,17 @@ func TestPutWriter(t *testing.T) {
 		{"noconc", []byte("foo"), nil,
 			&Config{Concurrency: 0, PartSize: 5 * mb, NTry: 1, Md5Check: true, Scheme: "https", Client: ClientWithTimeout(5 * time.Second)}, 3, nil},
 		{"enc test", []byte("test_data"), nil, nil, 9, nil},
+
+		{"enc test&", []byte("test_data"), nil, nil, 9, nil},
+		{"enc test&$", []byte("test_data"), nil, nil, 9, nil},
+		{"enc test&$@", []byte("test_data"), nil, nil, 9, nil},
+		{"enc test&$@=", []byte("test_data"), nil, nil, 9, nil},
+		{"enc test&$@=:", []byte("test_data"), nil, nil, 9, nil},
+		{"abc&123/enc test&$@=:", []byte("test_data"), nil, nil, 9, nil},
+		// TODO fix cases with plus - I think some double encoding is happening
+		// {"enc test&$@=:+", []byte("test_data"), nil, nil, 9, nil},
+		// {"enc test&$@=:+,", []byte("test_data"), nil, nil, 9, nil},
+		// {"enc test&$@=:+,?", []byte("test_data"), nil, nil, 9, nil},
 	}
 
 	for _, tt := range putTests {
