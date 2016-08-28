@@ -178,8 +178,6 @@ func (g *GetterController) Stop() (err error) {
 	g.getter.err = ErrStopped
 	g.t.Kill(ErrStopped)
 	err = g.t.Wait()
-	g.State = "Failed"
-	g.Reason = err.Error()
 	return
 }
 
@@ -193,9 +191,16 @@ func (g *GetterController) loop() error {
 			g.getter.activeChunksLock.Lock()
 			g.getter.Close()
 			for _, chunk := range g.getter.activeChunks {
-				chunk.rwrapper.ForceClose()
+				// XXX this seems hacky, I think there is a better way
+				if chunk.rwrapper != nil {
+					chunk.rwrapper.ForceClose()
+				}
 			}
 			g.getter.activeChunksLock.Unlock()
+			killReason := g.t.Err()
+			if killReason == ErrStopped {
+				g.State = "Stopped"
+			}
 			return nil
 		case <-time.After(loopPeriod):
 			// TODO copy in bytesdone from old repo
@@ -243,9 +248,10 @@ func (b *Bucket) GetAsync(path string, c *Config, w io.WriteCloser) (controller 
 		err = getReader.Close()
 		if err != nil {
 			controller.t.Kill(err)
+		} else {
+			// Normal termination because copy finished with no errors
+			controller.Complete()
 		}
-		// Normal termination because copy finished with no errors
-		controller.Complete()
 	}()
 	return
 }
@@ -319,6 +325,10 @@ func (p *PutController) Done() <-chan struct{} {
 	return p.t.Dead()
 }
 
+func (p *PutController) Err() error {
+	return p.t.Err()
+}
+
 func (p *PutController) loop() error {
 	p.State = "Uploading"
 	for {
@@ -328,6 +338,10 @@ func (p *PutController) loop() error {
 			for _, part := range p.putter.xml.Part {
 				p.putter.c.NTry = 0
 				part.rwrapper.ForceClose()
+			}
+			killReason := p.t.Err()
+			if killReason == ErrStopped {
+				p.State = "Stopped"
 			}
 			return nil
 		case <-time.After(loopPeriod):
@@ -360,11 +374,15 @@ func (p *PutController) Complete() {
 }
 
 func (p *PutController) Stop() (err error) {
+	//	g.getter.err = ErrStopped
+	//g.t.Kill(ErrStopped)
+
+	p.putter.err = ErrStopped
 	p.t.Kill(ErrStopped)
 	err = p.t.Wait()
-	p.State = "Failed"
-	p.Reason = err.Error()
-	return
+
+	//p.Reason = err.Error()
+	return err
 }
 
 // url returns a parsed url to the given path. c must not be nil
