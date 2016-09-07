@@ -138,7 +138,7 @@ func listObjectsGeneric(prefix string, delimiter string, b *Bucket) (*ListBucket
 		myResult := ListBucketResult{}
 		err = xml.Unmarshal(bodyBuf.Bytes(), &myResult)
 		if err != nil {
-			fmt.Printf("Can't unmarshal:\n%s\n", bodyBuf.Bytes())
+			logger.Printf("Can't unmarshal:\n%s\n", bodyBuf.Bytes())
 			return nil, err
 		}
 		container.results = append(container.results, &myResult)
