@@ -62,8 +62,8 @@ type chunk struct {
 
 type KeyContent struct {
 	Key          string
-	LastModified string
-	Size         string
+	LastModified time.Time `type:"timestamp" timestampFormat:"iso8601"`
+	Size         int64     `type:"integer"`
 	StorageClass string
 }
 
@@ -87,6 +87,15 @@ func (r *ListBucketContainer) ListKeys() (keys []string) {
 	for _, container := range r.results {
 		for _, keycontent := range container.Contents {
 			keys = append(keys, keycontent.Key)
+		}
+	}
+	return
+}
+
+func (r *ListBucketContainer) ListKeyContents() (keys []KeyContent) {
+	for _, container := range r.results {
+		for _, kc := range container.Contents {
+			keys = append(keys, kc)
 		}
 	}
 	return
