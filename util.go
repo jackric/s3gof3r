@@ -125,6 +125,43 @@ func (r readerWrapper) Read(p []byte) (n int, err error) {
 	return
 }
 
+// A bytes.Reader that can be focefully stopped
+// Also can report it's progress
+type seekReaderWrapper struct {
+	io.ReadSeeker
+	closed    *bool
+	bytesdone *int64
+}
+
+func newSeekReaderWrapper(r io.ReadSeeker) *seekReaderWrapper {
+	var x = int64(0)
+	var y = bool(false)
+	return &seekReaderWrapper{ReadSeeker: r, closed: &y, bytesdone: &x}
+}
+
+func (r seekReaderWrapper) ForceClose() {
+	*r.closed = true
+}
+
+func (r seekReaderWrapper) BytesDone() int64 {
+	return *r.bytesdone
+}
+
+func (r seekReaderWrapper) Seek(offset int64, whence int) (abs int64, err error) {
+	abs, err = r.ReadSeeker.Seek(offset, whence)
+	*r.bytesdone = abs
+	return
+}
+
+func (r seekReaderWrapper) Read(p []byte) (n int, err error) {
+	if *r.closed {
+		return 0, io.ErrUnexpectedEOF
+	}
+	n, err = r.ReadSeeker.Read(p)
+	*r.bytesdone += int64(n)
+	return
+}
+
 type speedTracker struct {
 	Speed    int64
 	lastTime time.Time

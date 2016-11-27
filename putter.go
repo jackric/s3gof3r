@@ -44,7 +44,7 @@ type part struct {
 	md5    string
 	sha256 string
 
-	rwrapper readerWrapper
+	rwrapper seekReaderWrapper
 }
 
 type putter struct {
@@ -155,7 +155,7 @@ func (p *putter) flush() {
 	reader := bytes.NewReader(p.buf[:p.bufbytes])
 	part := &part{
 		r:          reader,
-		rwrapper:   *newReaderWrapper(reader),
+		rwrapper:   *newSeekReaderWrapper(reader),
 		len:        int64(p.bufbytes),
 		b:          p.buf,
 		PartNumber: p.part,
@@ -207,7 +207,7 @@ func (p *putter) putPart(part *part) error {
 	v := url.Values{}
 	v.Set("partNumber", strconv.Itoa(part.PartNumber))
 	v.Set("uploadId", p.UploadID)
-	if _, err := part.r.Seek(0, 0); err != nil { // move back to beginning, if retrying
+	if _, err := part.rwrapper.Seek(0, 0); err != nil { // move back to beginning, if retrying
 		return err
 	}
 	req, err := http.NewRequest("PUT", p.url.String()+"?"+v.Encode(), part.rwrapper)
