@@ -169,11 +169,6 @@ func (g *GetterController) Headers() map[string][]string {
 	return g.headers
 }
 
-func (g *GetterController) Complete() {
-	g.t.Kill(nil)
-	g.State = "Completed"
-}
-
 func (g *GetterController) Stop() (err error) {
 	g.getter.err = ErrStopped
 	g.t.Kill(ErrStopped)
@@ -250,7 +245,8 @@ func (b *Bucket) GetAsync(path string, c *Config, w io.WriteCloser) (controller 
 			controller.t.Kill(err)
 		} else {
 			// Normal termination because copy finished with no errors
-			controller.Complete()
+			controller.t.Kill(nil)
+			controller.State = "Completed"
 		}
 	}()
 	return
