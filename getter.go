@@ -116,7 +116,7 @@ func listObjectsGeneric(prefix string, delimiter string, b *Bucket) (*ListBucket
 	var container = &ListBucketContainer{}
 	maxIters := 100
 	for i := 1; i <= maxIters; i = i + 1 {
-		url := "http://" + b.Name + ".s3.amazonaws.com/?list-type=2"
+		url := "https://" + b.Name + ".s3.amazonaws.com/?list-type=2"
 
 		var emptyBody = strings.NewReader("")
 
