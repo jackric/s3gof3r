@@ -2,6 +2,10 @@
 package s3gof3r
 
 import (
+	"bytes"
+	"crypto/md5"
+	"encoding/base64"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -461,6 +465,81 @@ func (b *Bucket) delete(path string) error {
 	}
 	defer checkClose(resp.Body, err)
 	if resp.StatusCode != 204 {
+		return newRespError(resp)
+	}
+	return nil
+}
+
+// MultiDelete deletes the given paths in a single request to AWS
+func (b *Bucket) MultiDelete(paths []string) error {
+	chunkSize := 1000
+	i := 0
+	for i < len(paths) {
+		upperBound := min(len(paths), i+chunkSize)
+		paths_slice := paths[i:upperBound]
+		err := b.multiDelete(paths_slice)
+		if err != nil {
+			return err
+		}
+		i += chunkSize
+	}
+	logger.Printf("%d keys deleted from %s\n", len(paths), b.Name)
+	return nil
+}
+
+type MultiDeleteObject struct {
+	XMLName xml.Name `xml:"Object"`
+	Key     string
+}
+
+type MultiDeleteRequest struct {
+	XMLName xml.Name `xml:"Delete"`
+	Quiet   bool
+	Objects []MultiDeleteObject
+}
+
+func (b *Bucket) multiDelete(paths []string) error {
+	if len(paths) > 1000 {
+		panic("Can only delete 1000 keys at a time")
+	}
+	var deleteObjects []MultiDeleteObject
+	for _, path := range paths {
+		deleteObjects = append(deleteObjects, MultiDeleteObject{Key: path})
+	}
+	deleteRequest := MultiDeleteRequest{
+		Quiet:   true,
+		Objects: deleteObjects,
+	}
+	u, err := b.url("", b.conf())
+
+	vals := make(url.Values)
+	vals.Add("delete", "")
+	u.RawQuery = vals.Encode()
+
+	if err != nil {
+		return err
+	}
+	buf := bytes.NewBuffer(nil)
+	enc := xml.NewEncoder(buf)
+	enc.Encode(deleteRequest)
+	r := http.Request{
+		Method:        "POST",
+		URL:           u,
+		ContentLength: int64(buf.Len()),
+		Body:          ioutil.NopCloser(buf),
+	}
+	r.Header = make(http.Header)
+	md5 := md5.Sum(buf.Bytes())
+	s := base64.StdEncoding.EncodeToString(md5[:])
+	r.Header["Content-Md5"] = []string{s}
+	b.Sign(&r)
+
+	resp, err := b.conf().Do(&r)
+	if err != nil {
+		return err
+	}
+	defer checkClose(resp.Body, err)
+	if resp.StatusCode != 200 {
 		return newRespError(resp)
 	}
 	return nil

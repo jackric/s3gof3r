@@ -24,15 +24,15 @@ import (
 var b *tB
 
 func init() {
-	var err error
-	b, err = testBucket()
-	if err != nil {
-		log.Fatal(err)
-	}
-	uploadTestFiles()
-	if testing.Verbose() {
-		SetLogger(os.Stderr, "test: ", (log.LstdFlags | log.Lshortfile), true)
-	}
+	// var err error
+	// b, err = testBucket()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// uploadTestFiles()
+	// if testing.Verbose() {
+	SetLogger(os.Stderr, "test: ", (log.LstdFlags | log.Lshortfile), true)
+	// }
 }
 
 func uploadTestFiles() {
