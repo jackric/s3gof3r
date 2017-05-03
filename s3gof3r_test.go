@@ -405,6 +405,27 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+func TestMultiDelete(t *testing.T) {
+	var paths = []string{
+		"jackriches_gmail.com/sphere_copy/gm_root/render/sphere_5frame.mantra_ipr.0116.exr",
+		"jackriches_gmail.com/sphere_copy/gm_root/render/sphere_5frame.mantra_ipr.0117.exr",
+	}
+	keys := Keys{
+		AccessKey: "AKIAIMUFXUCQX3CTDFZQ",
+		SecretKey: "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",
+	}
+
+	// Open bucket to put file into
+	s3 := New("s3-us-west-1.amazonaws.com", keys)
+	b := s3.Bucket("gm-cali")
+	err := b.multiDelete(paths)
+
+	if err != nil {
+		panic(err)
+	}
+
+}
+
 func TestGetVersion(t *testing.T) {
 	t.Parallel()
 
